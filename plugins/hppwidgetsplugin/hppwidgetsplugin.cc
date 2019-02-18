@@ -354,7 +354,14 @@ namespace hpp {
           ite->item->updateFromRobotConfig (config_);
         }
       }
-      Ts = client()->robot()->getJointsPosition(config_, jointFrames_);
+      try {
+        Ts = client()->robot()->getJointsPosition(config_, jointFrames_);
+      } catch (const hpp::Error& e) {
+        emit logFailure(QString ("Could not update joint frames because ")
+            + e.msg + ". Reset joint frames.");
+        jointFrames_.length(0);
+        jointGroupNames_.clear();
+      }
       fromHPP (Ts, bodyConfs_);
       main->osg()->applyConfigurations (jointGroupNames_, bodyConfs_);
 
@@ -604,11 +611,19 @@ namespace hpp {
       gepetto::gui::MainWindow* main = gepetto::gui::MainWindow::instance ();
       std::string target = escapeJointName(jn);
       graphics::GroupNodePtr_t group = main->osg()->getGroup (target.c_str(), false);
-      if (group) return target;
-      if (!main->osg()->getGroup(target)) {
+      bool addToList = false;
+      if (group) {
+        // Check that it is in jointGroupNames_
+        if (std::find (jointGroupNames_.begin(), jointGroupNames_.end(), target)
+            == jointGroupNames_.end())
+          addToList = true;
+      } else {
         main->osg()->createGroup(target);
         main->osg()->addToGroup(target, "joints");
+        addToList = true;
+      }
 
+      if (addToList) {
         hpp::Transform__var t = client()->robot()->getJointPosition (jn.c_str());
         OsgConfiguration_t p;
         fromHPP(t, p);
